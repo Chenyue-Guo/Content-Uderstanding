@@ -1,9 +1,9 @@
 # Streamlit Frontend for Azure AI Content Understanding
 
 
-![Face Management UI](./screenshot-face-management.png)
+![Face Management UI](images/screenshot-face-management.png)
 
-![Video Analysis UI](./screenshot-video-analysis.png)
+![Video Analysis UI](images/screenshot-video-analysis.png)
 
 This Streamlit app provides a modern, user-friendly interface for managing face directories and analyzing video content using Azure AI Content Understanding services.
 
