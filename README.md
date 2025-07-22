@@ -49,7 +49,7 @@ AZURE_SUBSCRIPTION_KEY=your-subscription-key
 2. Start the app from the `app/frontend` directory:
 
    ```sh
-   streamlit run streamlit_app.py
+   streamlit run frontend/streamlit_app.py
    ```
 
 3. Open the provided local URL in your browser.
