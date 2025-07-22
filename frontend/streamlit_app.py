@@ -1,9 +1,12 @@
 import streamlit as st
 import os
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
-from content_understanding_face_client import AzureContentUnderstandingFaceClient
-from content_understanding_client import AzureContentUnderstandingClient
+
+# 添加项目根目录到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.content_understanding_face_client import AzureContentUnderstandingFaceClient
+from backend.content_understanding_client import AzureContentUnderstandingClient
 import base64
 import tempfile
 from PIL import Image
@@ -20,7 +23,7 @@ API_VERSION = os.getenv("AZURE_AI_API_VERSION")
 SUBSCRIPTION_KEY = os.getenv("AZURE_SUBSCRIPTION_KEY")
 
 credential = DefaultAzureCredential()
-token_provider = get_bearer_token_provider(credential, "https://cognitiveservices.azure.com/.default")
+token_provider = get_bearer_token_provider(credential, "https://ai.azure.com/.default")
 
 face_client = AzureContentUnderstandingFaceClient(
     endpoint=ENDPOINT,
