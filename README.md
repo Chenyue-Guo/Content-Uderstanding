@@ -21,6 +21,7 @@ This Streamlit app provides a modern, user-friendly interface for managing face 
 ## Requirements
 
 - Python 3.8+
+- Login by using Azure CLI
 - [Streamlit](https://streamlit.io/)
 - [Pillow](https://pillow.readthedocs.io/)
 - [python-dotenv](https://pypi.org/project/python-dotenv/)
@@ -32,6 +33,16 @@ Install dependencies:
 ```sh
 pip install streamlit pillow python-dotenv azure-identity
 ```
+
+Azure CLI Login:
+Install [Azure CLI](https://aka.ms/azure-cli), and Login into your Azure account by:
+
+```sh
+az login
+```
+
+Then selcet an available subscription from your account.
+
 
 ## Environment Variables
 
