@@ -27,6 +27,7 @@ This Streamlit app provides a modern, user-friendly interface for managing face 
 - [python-dotenv](https://pypi.org/project/python-dotenv/)
 - [azure-identity](https://pypi.org/project/azure-identity/)
 - Azure AI Content Understanding backend Python client modules (`content_understanding_face_client.py`, `content_understanding_client.py`)
+- opencv-python-headless
 
 Install dependencies:
 
@@ -64,6 +65,11 @@ AZURE_SUBSCRIPTION_KEY=your-subscription-key
    ```
 
 3. Open the provided local URL in your browser.
+
+4. For analyzer ID, use: 
+  ``` sh
+  prebuilt-videoAnalyzer
+  ```
 
 ## How It Works
 
