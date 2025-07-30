@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.content_understanding_face_client import AzureContentUnderstandingFaceClient
 from backend.content_understanding_client import AzureContentUnderstandingClient
+from backend.VideoFrameHelper import VideoFrameHelper
 
 load_dotenv()
 
@@ -170,52 +171,67 @@ if module == "Face Management":
 elif module == "Video Analysis":
     st.title("Video Content Analysis")
     st.write("Upload an MP4 video to analyze faces and content.")
+
     analyzer_id = st.text_input("Analyzer ID", value="prebuilt-videoAnalyzer")
     video_file = st.file_uploader("Upload MP4 Video", type=["mp4"])
 
     if video_file and st.button("Analyze Video"):
+        # -- 把上传文件保存为临时文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
             tmp.write(video_file.read())
             tmp_path = tmp.name
 
         with st.spinner("Analyzing..."):
             try:
-                # 调用 Azure 预构建分析器
+                # 调用 Azure Video Analyzer
                 resp = content_client.begin_analyze(analyzer_id, file_location=tmp_path)
                 result = content_client.poll_result(resp)
 
-                # 显示原始 JSON
-                with st.expander("🔍 Raw JSON"):
-                    st.json(result)
-
-                # 解析段落与关键帧
+                # 兼容旧/新版 SDK 数据结构，取出 contents 数组
                 inner = result.get("contents") or result.get("result", {}).get("contents")
                 if not inner:
                     st.error("无法在返回结果中找到 contents")
                     st.stop()
                 contents = inner[0]
 
-                segments = contents.get("segments", [])
-                key_times = contents.get("KeyFrameTimesMs", [])
+                # 实例化 Helper
+                helper = VideoFrameHelper(
+                    key_times=contents.get("KeyFrameTimesMs"),
+                    content_client=content_client,
+                    operation_id=result["id"],
+                    video_path=tmp_path,
+                )
 
+                # 展示原始 JSON
+                with st.expander("🔍 Raw JSON"):
+                    st.json(result)
+
+                # 渲染段落 + 关键帧
                 st.subheader("Segments with Key Frames")
+                segments = contents.get("segments", [])
                 for seg in segments:
-                    start_ms, end_ms = seg["startTimeMs"], seg["endTimeMs"]
-                    seg_id = seg.get("segmentId", "?")
-                    desc = seg.get("description", "")
-                    frame_ms = pick_key_time(start_ms, end_ms, key_times)
-                    img_bytes = fetch_frame(result["id"], tmp_path, frame_ms)
+                    start_ms = seg["startTimeMs"]
+                    end_ms   = seg["endTimeMs"]
+                    desc     = seg.get("description", "")
+                    seg_id   = seg.get("segmentId", "?")
 
-                    # ---- UI：左文字右图片 ----
+                    # 获得帧
+                    img_bytes = helper.get_segment_preview(start_ms, end_ms)
+
+                    # UI：左文字右图片
                     col1, col2 = st.columns([2, 3])
                     with col1:
-                        st.markdown(f"#### Segment {seg_id}  \n{ms_to_ts(start_ms)} — {ms_to_ts(end_ms)}")
+                        st.markdown(
+                            f"#### Segment {seg_id}  \n{helper.ts(start_ms)} — {helper.ts(end_ms)}"
+                        )
                         st.write(desc)
                     with col2:
                         if img_bytes:
-                            st.image(img_bytes, caption=ms_to_ts(frame_ms), use_container_width=True)
+                            st.image(img_bytes, caption=helper.ts(start_ms), use_container_width=True)
                         else:
                             st.info("无法获取关键帧")
                     st.markdown("---")
+
             finally:
+                # 清理临时文件
                 os.remove(tmp_path)
