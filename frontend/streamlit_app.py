@@ -49,51 +49,6 @@ st.set_page_config(page_title="Face Directory & Video Analyzer", layout="wide")
 st.sidebar.title("Operation Manual")
 module = st.sidebar.radio(" ", ["Face Management", "Video Analysis"])
 
-# -----------------------------------
-# 辅助函数
-# -----------------------------------
-def ms_to_ts(ms: int) -> str:
-    """毫秒 → 00:00.000 格式字符串"""
-    s, ms = divmod(ms, 1000)
-    m, s = divmod(s, 60)
-    return f"{m:02d}:{s:02d}.{ms:03d}"
-
-def pick_key_time(start: int, end: int, key_times: list[int]) -> int:
-    """取区间内最靠近 start 的关键帧；若该段没有关键帧，则返回区间中点"""
-    in_seg = [t for t in key_times if start <= t <= end]
-    return in_seg[0] if in_seg else (start + end) // 2
-
-def fetch_frame(operation_id: str, tmp_video_path: str, time_ms: int) -> bytes | None:
-    """
-    先尝试 Azure Content Understanding 的 get_frame API，
-    若不可用或失败，再用本地 OpenCV 从视频抽帧。
-    返回 JPG bytes；若两种方式都失败则返回 None。
-    """
-    # ---- 1️⃣ Azure API 抽帧 ----
-    try:
-        data = content_client.get_frame(operation_id=operation_id, time_ms=time_ms)
-        if isinstance(data, dict) and "data" in data:
-            print("Fetched frame from Azure API")
-            return base64.b64decode(data["data"])
-    except Exception:
-        pass  # 转而尝试本地
-
-    # ---- 2️⃣ OpenCV 本地抽帧 ----
-    if cv2 is None:
-        return None
-    try:
-        cap = cv2.VideoCapture(tmp_video_path)
-        cap.set(cv2.CAP_PROP_POS_MSEC, time_ms)
-        ok, frame = cap.read()
-        cap.release()
-        if ok and frame is not None:
-            _, buf = cv2.imencode(".jpg", frame)
-            print("Fetched frame from local OpenCV")
-            return buf.tobytes()
-    except Exception:
-        pass
-    return None
-
 # ========== FACE MANAGEMENT ==========
 if module == "Face Management":
     st.title("Face Directory Management")
