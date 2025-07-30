@@ -42,7 +42,7 @@ Install [Azure CLI](https://aka.ms/azure-cli), and Login into your Azure account
 az login
 ```
 
-Then selcet an available subscription from your account.
+Then select an available subscription from your account.
 
 
 ## Environment Variables
