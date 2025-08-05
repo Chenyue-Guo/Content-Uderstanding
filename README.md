@@ -28,11 +28,12 @@ This Streamlit app provides a modern, user-friendly interface for managing face 
 - [azure-identity](https://pypi.org/project/azure-identity/)
 - Azure AI Content Understanding backend Python client modules (`content_understanding_face_client.py`, `content_understanding_client.py`)
 - opencv-python-headless
+- numpy
 
 Install dependencies:
 
 ```sh
-pip install streamlit pillow python-dotenv azure-identity
+pip install streamlit pillow python-dotenv azure-identity opencv-python-headless numpy
 ```
 
 Azure CLI Login:
