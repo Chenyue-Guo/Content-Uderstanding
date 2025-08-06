@@ -3,14 +3,14 @@ from __future__ import annotations
 import io
 import re
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 
 class VideoFrameHelper:
     """
     负责选帧、抽帧、时间格式化等逻辑的工具类。
 
-    **新增功能** ``extract_timestamp`` —— 仅依赖本地 `pytesseract` (不再尝试 Azure OCR)。
+    **新增功能** ``extract_timestamp`` —— 使用 easyOCR 进行文字识别。
 
     示例::
         vf = VideoFrameHelper(
@@ -49,14 +49,17 @@ class VideoFrameHelper:
             self.cv2 = None
 
         try:
-            import pytesseract  # type: ignore
+            import easyocr  # type: ignore
             from PIL import Image  # type: ignore
 
-            self.pytesseract = pytesseract
+            self.easyocr = easyocr
             self.Image = Image
+            # 初始化 easyOCR reader，支持中文和英文
+            self.reader = easyocr.Reader(['ch_sim', 'en'])
         except ImportError:
-            self.pytesseract = None
+            self.easyocr = None
             self.Image = None
+            self.reader = None
 
     # ---------------------------------------------------------
     # 公共 API
@@ -70,14 +73,64 @@ class VideoFrameHelper:
         """毫秒 → 00:00.000 字符串（方便别处调用）"""
         return self._ms_to_ts(ms)
 
+    def extract_text_from_frame(
+        self,
+        *,
+        time_ms: int,
+        bbox: Optional[Tuple[int, int, int, int]] = None,
+    ) -> List[str]:
+        """从指定时间点的帧中提取文字信息。
+
+        参数
+        ----
+        time_ms : int
+            帧的毫秒时间戳。
+        bbox : (x1, y1, x2, y2) | None
+            需要裁剪的矩形区域，如果为None则处理整个帧。
+
+        返回
+        ----
+        List[str]
+            识别到的文字列表
+        """
+        if not (self.easyocr and self.Image and self.reader):
+            # 未安装 easyOCR 依赖
+            return []
+
+        # 1. 获取帧
+        img_bytes = self._fetch_frame(time_ms)
+        if not img_bytes:
+            return []
+
+        # 2. 转换为PIL图像
+        img = self.Image.open(io.BytesIO(img_bytes))
+        
+        # 3. 裁剪到指定区域（如果提供）
+        if bbox:
+            x1, y1, x2, y2 = bbox
+            img = img.crop((x1, y1, x2, y2))
+
+        # 4. 转换为numpy数组
+        import numpy as np
+        img_array = np.array(img)
+
+        # 5. easyOCR 识别
+        try:
+            results = self.reader.readtext(img_array)
+            # 提取文字内容
+            texts = [text[1] for text in results]
+            return texts
+        except Exception as e:
+            print(f"OCR识别出错: {e}")
+            return []
+
     def extract_timestamp(
         self,
         *,
         time_ms: int,
         bbox: Tuple[int, int, int, int],
-        ocr_lang: str = "chi_sim+eng",
     ) -> Optional[datetime]:
-        """从指定时间点、指定像素区域提取“YYYY年M月D日 HH:MM(:SS)”时间标签。
+        """从指定时间点、指定像素区域提取"YYYY年M月D日 HH:MM(:SS)"时间标签。
 
         参数
         ----
@@ -85,35 +138,49 @@ class VideoFrameHelper:
             帧的毫秒时间戳。
         bbox : (x1, y1, x2, y2)
             需要裁剪的矩形区域。
-        ocr_lang : str
-            Tesseract 语言包，默认同时启用中文与英文。
 
         返回
         ----
         datetime | None
         """
-        if not (self.pytesseract and self.Image):
-            # 未安装 OCR 依赖
+        texts = self.extract_text_from_frame(time_ms=time_ms, bbox=bbox)
+        if not texts:
             return None
 
-        # 1. 获取帧
-        img_bytes = self._fetch_frame(time_ms)
-        if not img_bytes:
+        # 合并所有识别到的文字
+        full_text = " ".join(texts)
+        
+        # 解析时间标签
+        return self._parse_timestamp(full_text)
+
+    def extract_datetime_info(
+        self,
+        *,
+        time_ms: int,
+        bbox: Tuple[int, int, int, int],
+    ) -> Optional[datetime]:
+        """从指定时间点、指定像素区域提取"YYYY-MM-DD HH:MM:SS"格式的时间信息。
+
+        参数
+        ----
+        time_ms : int
+            帧的毫秒时间戳。
+        bbox : (x1, y1, x2, y2)
+            需要裁剪的矩形区域。
+
+        返回
+        ----
+        datetime | None
+        """
+        texts = self.extract_text_from_frame(time_ms=time_ms, bbox=bbox)
+        if not texts:
             return None
 
-        # 2. 裁剪到指定区域
-        img = self.Image.open(io.BytesIO(img_bytes))
-        x1, y1, x2, y2 = bbox
-        region = img.crop((x1, y1, x2, y2))
-
-        # 3. OCR 识别（仅本地 pytesseract）
-        try:
-            text = self.pytesseract.image_to_string(region, lang=ocr_lang)
-        except Exception:
-            return None
-
-        # 4. 解析
-        return self._parse_timestamp(text)
+        # 合并所有识别到的文字
+        full_text = " ".join(texts)
+        
+        # 解析时间信息
+        return self._parse_datetime_info(full_text)
 
     # ---------------------------------------------------------
     # 私有工具方法
@@ -188,3 +255,38 @@ class VideoFrameHelper:
             )
         except ValueError:
             return None
+
+    @staticmethod
+    def _parse_datetime_info(text: str) -> Optional[datetime]:
+        """解析"YYYY-MM-DD HH:MM:SS"格式的时间信息。"""
+        text = text.strip().replace("\n", " ")
+        
+        # 支持多种格式的正则表达式
+        patterns = [
+            # YYYY-MM-DD HH:MM:SS
+            r"(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2}):(?P<second>\d{1,2})",
+            # YYYY-MM-DD HH:MM
+            r"(?P<year>\d{4})-(?P<month>\d{1,2})-(?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})",
+            # YYYY/MM/DD HH:MM:SS
+            r"(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2}):(?P<second>\d{1,2})",
+            # YYYY/MM/DD HH:MM
+            r"(?P<year>\d{4})/(?P<month>\d{1,2})/(?P<day>\d{1,2})\s+(?P<hour>\d{1,2}):(?P<minute>\d{1,2})",
+        ]
+        
+        for pattern in patterns:
+            m = re.search(pattern, text)
+            if m:
+                gd = m.groupdict(default="0")
+                try:
+                    return datetime(
+                        int(gd["year"]),
+                        int(gd["month"]),
+                        int(gd["day"]),
+                        int(gd["hour"]),
+                        int(gd["minute"]),
+                        int(gd.get("second", "0")),
+                    )
+                except ValueError:
+                    continue
+        
+        return None
